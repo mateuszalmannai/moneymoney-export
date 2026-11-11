@@ -97,6 +97,11 @@ case "$*" in
         cat "$STUB_DATA/accounts.plist" ;;
     *"export transactions"*)
         [ "${STUB_MODE:-valid}" = "empty_tx" ] && exit 0
+        # A bare word is a valid old-style property list, but not an export.
+        if [ "${STUB_MODE:-valid}" = "string_tx" ]; then
+            echo "/tmp/MoneyMoney-export.plist"
+            exit 0
+        fi
         cat "$STUB_DATA/transactions.plist" ;;
 esac
 EOF
@@ -202,6 +207,14 @@ test_invalid_plist() {
     check "no temp files left" no_temp_files "$tmp/out"
 }
 
+test_string_instead_of_plist() {
+    seed_previous_export
+    STUB_MODE=string_tx run_script -o "$tmp/out"
+    check "exit 3 (got $rc)" rc_is 3
+    check "previous export untouched" previous_export_untouched
+    check "no temp files left" no_temp_files "$tmp/out"
+}
+
 test_creates_output_dir() {
     run_script -o "$tmp/new/nested/out"
     check "exit 0 (got $rc)" rc_is 0
@@ -220,7 +233,7 @@ test_env_var_dir() {
 unset MONEYMONEY_EXPORT_DIR STUB_MODE STUB_PGREP_RC
 
 for t in writes_both_files prints_summary no_date_by_default passes_start_date \
-    rejects_bad_date not_running osascript_fails invalid_plist \
+    rejects_bad_date not_running osascript_fails invalid_plist string_instead_of_plist \
     creates_output_dir env_var_dir; do
     tmp="$(mktemp -d)"
     make_stubs "$tmp"

@@ -78,7 +78,9 @@ fetch() { # fetch <label> <applescript> <file>
     if ! message="$(osascript -e "$applescript" 2>&1 > "$file")"; then
         fail "$label export failed: $message"
     fi
-    if ! plutil -lint "$file" > /dev/null 2>&1; then
+    # plutil alone is not enough: it also accepts old-style property lists,
+    # and a bare word or a file path is one of those.
+    if [ "$(head -c 5 "$file")" != "<?xml" ] || ! plutil -lint "$file" > /dev/null 2>&1; then
         fail "$label export did not return a property list"
     fi
 }
