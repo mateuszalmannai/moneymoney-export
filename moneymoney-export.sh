@@ -15,7 +15,8 @@ usage: moneymoney-export.sh [-o DIR] [-s YYYY-MM-DD]
 
   -o DIR         output folder. Default: $MONEYMONEY_EXPORT_DIR, else
                  ~/Library/Mobile Documents/com~apple~CloudDocs/moneymoney-export
-  -s YYYY-MM-DD  export transactions from this date on. Default: all of them.
+  -s YYYY-MM-DD  export transactions from this date on. Default: all of them
+                 (asked for as "from 2000-01-01").
   -h             show this help
 
 Writes accounts.plist and transactions.plist into the output folder.
@@ -85,10 +86,10 @@ fetch() { # fetch <label> <applescript> <file>
     fi
 }
 
-from=""
-if [ -n "$since" ]; then
-    from=" from date \"$since\""
-fi
+# MoneyMoney refuses `export transactions` without a start date ("Some
+# parameter is missing"), so the full history is asked for from a date before
+# any account can have data.
+from=" from date \"${since:-2000-01-01}\""
 
 fetch "accounts" 'tell application "MoneyMoney" to export accounts' "$tmp_accounts"
 fetch "transactions" "tell application \"MoneyMoney\" to export transactions$from as \"plist\"" "$tmp_transactions"

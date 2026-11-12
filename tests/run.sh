@@ -164,10 +164,13 @@ test_prints_summary() {
     check "output path" file_contains "$tmp/stdout" "$tmp/out"
 }
 
-test_no_date_by_default() {
+# MoneyMoney refuses `export transactions` without a start date ("Some
+# parameter is missing"), so "everything" is asked for as "from 2000-01-01".
+test_full_history_by_default() {
     run_script -o "$tmp/out"
-    check "asks for plist" file_contains "$tmp/osascript.log" 'export transactions as "plist"'
-    check "no from date" file_lacks "$tmp/osascript.log" "from date"
+    check "exit 0 (got $rc)" rc_is 0
+    check "asks for everything as plist" file_contains "$tmp/osascript.log" \
+        'export transactions from date "2000-01-01" as "plist"'
 }
 
 test_passes_start_date() {
@@ -232,7 +235,7 @@ test_env_var_dir() {
 
 unset MONEYMONEY_EXPORT_DIR STUB_MODE STUB_PGREP_RC
 
-for t in writes_both_files prints_summary no_date_by_default passes_start_date \
+for t in writes_both_files prints_summary full_history_by_default passes_start_date \
     rejects_bad_date not_running osascript_fails invalid_plist string_instead_of_plist \
     creates_output_dir env_var_dir; do
     tmp="$(mktemp -d)"
