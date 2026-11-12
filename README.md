@@ -50,9 +50,9 @@ files of the previous run stay as they were.
 | Code | Meaning |
 |------|---------|
 | 0 | Both files written |
-| 1 | Wrong usage (unknown option, malformed date) |
+| 1 | Wrong usage (unknown option, a date that is malformed or does not exist) |
 | 2 | MoneyMoney is not running |
-| 3 | The export failed, for example because MoneyMoney is locked. MoneyMoney's own message is printed. |
+| 3 | The export failed, for example because MoneyMoney is locked (MoneyMoney's own message is printed), or the output folder cannot be written. |
 
 ## Tests
 

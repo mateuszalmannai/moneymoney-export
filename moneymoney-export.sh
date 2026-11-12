@@ -48,9 +48,14 @@ if [ $# -gt 0 ]; then
     exit 1
 fi
 
-if [ -n "$since" ] && ! [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-    echo "moneymoney-export: start date must look like 2026-09-01, got '$since'" >&2
-    exit 1
+# The round trip through date(1) rejects dates that have the right shape but
+# do not exist (2026-13-45, 2026-02-30).
+if [ -n "$since" ]; then
+    if ! [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
+        [ "$(date -j -f "%Y-%m-%d" "$since" "+%Y-%m-%d" 2> /dev/null)" != "$since" ]; then
+        echo "moneymoney-export: start date must be a real date like 2026-09-01, got '$since'" >&2
+        exit 1
+    fi
 fi
 
 # Checked with pgrep, not AppleScript: `tell application` would launch
@@ -60,13 +65,18 @@ if ! pgrep -x MoneyMoney > /dev/null; then
     exit 2
 fi
 
-fail() { # fail <message>
+fail() { # fail <message>: MoneyMoney did not deliver; nothing has been replaced yet
     echo "moneymoney-export: $1" >&2
     echo "Nothing was written; a previous export is unchanged. Is MoneyMoney unlocked?" >&2
     exit 3
 }
 
-mkdir -p "$out" || fail "cannot create output folder: $out"
+die() { # die <message>: a problem with the output folder, not with MoneyMoney
+    echo "moneymoney-export: $1" >&2
+    exit 3
+}
+
+mkdir -p "$out" 2> /dev/null || die "cannot create output folder: $out"
 
 # Both exports go to temporary files in the output folder and are renamed into
 # place only when both are valid, so a failed run never leaves half an export.
@@ -94,8 +104,10 @@ from=" from date \"${since:-2000-01-01}\""
 fetch "accounts" 'tell application "MoneyMoney" to export accounts' "$tmp_accounts"
 fetch "transactions" "tell application \"MoneyMoney\" to export transactions$from as \"plist\"" "$tmp_transactions"
 
-mv -f "$tmp_accounts" "$out/accounts.plist" || fail "cannot write $out/accounts.plist"
-mv -f "$tmp_transactions" "$out/transactions.plist" || fail "cannot write $out/transactions.plist"
+mv -f "$tmp_accounts" "$out/accounts.plist" ||
+    die "cannot write $out/accounts.plist; a previous export is unchanged"
+mv -f "$tmp_transactions" "$out/transactions.plist" ||
+    die "cannot write $out/transactions.plist. The export is incomplete: accounts.plist is new, transactions.plist is not. Run the export again."
 
 # Summary, from a text scan of the XML.
 accounts="$(grep -c '<key>uuid</key>' "$out/accounts.plist")"

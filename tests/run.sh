@@ -105,7 +105,17 @@ case "$*" in
         cat "$STUB_DATA/transactions.plist" ;;
 esac
 EOF
-    chmod +x "$tmp/bin/pgrep" "$tmp/bin/osascript"
+    # mv fails for the final transactions.plist when STUB_MV_FAIL is set.
+    cat > "$tmp/bin/mv" <<'EOF'
+#!/bin/bash
+for last; do :; done
+if [ -n "${STUB_MV_FAIL:-}" ] && [ "${last##*/}" = "transactions.plist" ]; then
+    echo "mv: stubbed failure" >&2
+    exit 1
+fi
+exec /bin/mv "$@"
+EOF
+    chmod +x "$tmp/bin/pgrep" "$tmp/bin/osascript" "$tmp/bin/mv"
 }
 
 # run_script <args...>: runs the script with the stubs; sets $rc, writes
@@ -218,6 +228,41 @@ test_string_instead_of_plist() {
     check "no temp files left" no_temp_files "$tmp/out"
 }
 
+test_rejects_impossible_date() {
+    run_script -o "$tmp/out" -s 2026-13-45
+    check "month 13: exit 1 (got $rc)" rc_is 1
+    run_script -o "$tmp/out" -s 2026-02-30
+    check "30 February: exit 1 (got $rc)" rc_is 1
+    check "osascript never called" osascript_not_called
+}
+
+test_output_dir_with_spaces() {
+    run_script -o "$tmp/my out dir/sub dir"
+    check "exit 0 (got $rc)" rc_is 0
+    check "accounts written" is_plist "$tmp/my out dir/sub dir/accounts.plist"
+    check "transactions written" is_plist "$tmp/my out dir/sub dir/transactions.plist"
+    check "no temp files left" no_temp_files "$tmp/my out dir/sub dir"
+}
+
+test_unwritable_output_dir() {
+    echo "a file, not a folder" > "$tmp/blocker"
+    run_script -o "$tmp/blocker/out"
+    check "exit 3 (got $rc)" rc_is 3
+    check "names the folder" file_contains "$tmp/stderr" "$tmp/blocker/out"
+    check "does not blame MoneyMoney" file_lacks "$tmp/stderr" "unlocked"
+    check "osascript never called" osascript_not_called
+}
+
+test_second_rename_fails() {
+    seed_previous_export
+    STUB_MV_FAIL=1 run_script -o "$tmp/out"
+    check "exit 3 (got $rc)" rc_is 3
+    check "says the export is incomplete" file_contains "$tmp/stderr" "accounts.plist is new, transactions.plist is not"
+    check "does not claim nothing was written" file_lacks "$tmp/stderr" "Nothing was written"
+    check "does not blame MoneyMoney" file_lacks "$tmp/stderr" "unlocked"
+    check "no temp files left" no_temp_files "$tmp/out"
+}
+
 test_creates_output_dir() {
     run_script -o "$tmp/new/nested/out"
     check "exit 0 (got $rc)" rc_is 0
@@ -233,10 +278,11 @@ test_env_var_dir() {
 
 # --- runner -----------------------------------------------------------------
 
-unset MONEYMONEY_EXPORT_DIR STUB_MODE STUB_PGREP_RC
+unset MONEYMONEY_EXPORT_DIR STUB_MODE STUB_PGREP_RC STUB_MV_FAIL
 
 for t in writes_both_files prints_summary full_history_by_default passes_start_date \
     rejects_bad_date not_running osascript_fails invalid_plist string_instead_of_plist \
+    rejects_impossible_date output_dir_with_spaces unwritable_output_dir second_rename_fails \
     creates_output_dir env_var_dir; do
     tmp="$(mktemp -d)"
     make_stubs "$tmp"
